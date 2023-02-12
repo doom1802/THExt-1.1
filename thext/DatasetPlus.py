@@ -50,7 +50,7 @@ class DatasetPlus():
         It parses training data organizing them into a dictionary.
     """
 
-    def __init__(self, list_text, list_abstract, list_highlights=None, 
+    def __init__(self, list_text=None, list_abstract=None, list_highlights=None, 
                     n_jobs = 2, 
                     aggregation_method="max", 
                     spacy_modelname="en_core_web_lg",
