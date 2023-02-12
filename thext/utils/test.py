@@ -38,7 +38,7 @@ def test_models(task = "task1",
 		data = pd.DataFrame(data)
 		data = data.iloc[:1600]
 	else:
-		data = pd.read_csv('Datasets/val_task2.csv', index_col='Unnamed: 0')
+		data = pd.read_csv('Datasets/val_task2.csv')
 		model_name_or_path = 'checkpoint4_morenolq-thext-cs-scibert_2'
 	
 	sr = SentenceRankerPlus(device='cuda')
