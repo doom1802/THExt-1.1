@@ -30,6 +30,5 @@ def train(dataset_name, checkpointName = "checkpoint", freezed = False):
 
 
 if __name__ == "__main__":
-    dataset = pd.read_csv('Datasets/dataset_task1.csv')
-    train(dataset, "checkpoint")
+    train('Datasets/dataset_task1.csv', "checkpoint")
 
