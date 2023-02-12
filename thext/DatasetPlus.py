@@ -3,6 +3,12 @@ from tqdm import tqdm
 import nltk
 import spacy
 from joblib import Parallel, delayed
+import pandas as pd
+from nltk.tokenize import sent_tokenize
+from nltk.tokenize import word_tokenize
+from transformers import AutoTokenizer
+from transformers import pipeline
+from datasets import load_dataset
 
 from multiprocess import Process, Manager, Pool
 import rouge #py-rouge
@@ -10,6 +16,8 @@ import rouge #py-rouge
 import logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s: %(message)s')
 logging.getLogger().setLevel(logging.INFO)
+import nltk
+nltk.download('punkt')
 
 
 class DatasetPlus():
@@ -43,7 +51,7 @@ class DatasetPlus():
     """
 
     def __init__(self, list_text, list_abstract, list_highlights=None, 
-                    n_jobs = 4, 
+                    n_jobs = 2, 
                     aggregation_method="max", 
                     spacy_modelname="en_core_web_lg",
                     normalization_score=1):
@@ -234,3 +242,158 @@ class DatasetPlus():
             exit()
 
         return r2p, r2r, r2f, rlp, rlr, rlf
+
+    def dataset_task1(self, datasetName):
+        dataset = load_dataset("cnn_dailymail","3.0.0",split="test")
+        max_size = 384 - 2 # number of tokens admitted minus 2 that are cls and sep
+        df =  pd.DataFrame(columns = ['sentence', 'abstract', 'r2p', 'r2r', 'r2f', 'rlp', 'rlr', 'rlf'])
+        checkpoint = 0
+        for row in dataset :
+
+            lista = []
+            sentences = sent_tokenize(row['article'])
+            
+            for sentence in sentences :
+                
+                d= {} 
+                size = len(word_tokenize(sentence))
+                abs = ''
+
+                for s in sentences :
+                    to_add = len(word_tokenize(abs))
+                    if size + to_add < max_size :
+                        abs += s
+                        size += to_add
+                    else :
+                        break
+                
+                r2p, r2r, r2f, rlp, rlr, rlf = self.get_regression_labels(sentence, sent_tokenize(row["highlights"]))
+                d["r2p"] = r2p
+                d["r2r"] = r2r
+                d["r2f"] = r2f
+                d["rlp"] = rlp
+                d["rlr"] = rlr
+                d["rlf"] = rlf
+                d['sentence'] = sentence
+                d['abstract'] = abs
+            
+                lista.append(d)
+
+            tempdf = pd.DataFrame(lista)
+            df = df.append(tempdf, ignore_index = True) 
+
+            checkpoint +=1
+            if checkpoint == 50:
+                df.to_csv(datasetName)
+                checkpoint = 0
+                print('Dataset updated')
+         
+
+    def dataset_task2(self, datasetName):
+        dataset = load_dataset("cnn_dailymail","3.0.0",split="test")
+        summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+        tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
+
+        data =  pd.DataFrame(columns = ['sentence', 'abstract', 'r2p', 'r2r', 'r2f', 'rlp', 'rlr', 'rlf'])
+        i = 0
+        checkpoint = 0
+
+        for row in dataset:
+            abs = ''
+            
+            checkpoint += 1
+
+            sentences = sent_tokenize(row['article'])
+            part1, part2, part3 = '','', ''
+
+            if len(tokenizer(row['article'])['input_ids']) > 1024:
+                
+                for s in sentences:
+                    if len(tokenizer(part1+s)['input_ids']) < 1024:
+                        part1 += s
+                    elif len(tokenizer(part2+s)['input_ids']) < 1024:
+                        part2 += s
+                    else :
+                        part3 += s
+
+                abs += summarizer(part1, max_length=130, min_length=30, do_sample=False)[0]['summary_text']
+                abs += summarizer(part2, max_length=130, min_length=30, do_sample=False)[0]['summary_text']
+                if len(part3) > 0:
+                    abs += summarizer(part2, max_length=130, min_length=30, do_sample=False)[0]['summary_text']
+                
+            else :
+                abs += summarizer(row['article'], max_length=130, min_length=30, do_sample=False)[0]['summary_text']
+
+            for sentence in sentences:  
+                
+                data.at[i,'abstract'] = abs
+                data.at[i,'sentence'] = sentence
+                r2p, r2r, r2f, rlp, rlr, rlf = self.get_regression_labels(sentence, sent_tokenize(row["highlights"]))
+                data.at[i,"r2p"] = r2p
+                data.at[i,"r2r"] = r2r
+                data.at[i,"r2f"] = r2f
+                data.at[i,"rlp"] = rlp
+                data.at[i,"rlr"] = rlr
+                data.at[i,"rlf"] = rlf
+                i += 1
+            
+            if checkpoint == 50:
+                data.to_csv(datasetName)
+                checkpoint = 0
+                print('Dataset updated')
+
+    def validation_set_task2(self,datasetName):
+        dataset = load_dataset("cnn_dailymail","3.0.0",split="validation")
+        summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+        tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
+        
+        data =  pd.DataFrame(columns = ['abstract', 'article', 'highlights'])
+        i=0
+        checkpoint = 0
+
+        for row in dataset:
+
+            abs = ''
+            
+            checkpoint += 1
+
+            sentences = sent_tokenize(row['article'])
+            part1, part2, part3 = '','', ''
+            max_length = max([ len(word_tokenize(s)) for s in sentences])
+
+            max_size = 384 -2 - max_length
+
+            if len(tokenizer(row['article'])['input_ids']) > 1024:
+                
+                for s in sentences:
+                    if len(tokenizer(part1+s)['input_ids']) < 1024:
+                        part1 += s
+                    elif len(tokenizer(part2+s)['input_ids']) < 1024:
+                        part2 += s
+                    else :
+                        part3 += s
+
+                
+                if len(part3) > 0:
+                    abs += summarizer(part1, max_length=int(max_size/3), min_length=30, do_sample=False)[0]['summary_text']
+                    abs += summarizer(part2, max_length=int(max_size/3), min_length=30, do_sample=False)[0]['summary_text']
+                    abs += summarizer(part2, max_length=int(max_size/3), min_length=30, do_sample=False)[0]['summary_text']
+                else:
+                    abs += summarizer(part1, max_length=int(max_size/2), min_length=30, do_sample=False)[0]['summary_text']
+                    abs += summarizer(part2, max_length=int(max_size/2), min_length=30, do_sample=False)[0]['summary_text']
+
+            else :
+                abs += summarizer(row['article'], max_length=max_size, min_length=30, do_sample=False)[0]['summary_text']
+
+
+            data.at[i,'abstract'] = abs
+            data.at[i,'article'] = row['article']
+            data.at[i,'highlights'] = row['highlights']
+
+            i += 1
+
+            if checkpoint == 50:
+                data.to_csv(datasetName)
+                checkpoint = 0
+                print('Dataset updated')
+

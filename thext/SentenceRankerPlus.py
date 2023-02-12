@@ -139,14 +139,14 @@ class SentenceRankerPlus():
                 self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name_or_path, num_labels = 1, attention_window=64, torch_dtype=torch.float16)
                 self.model.gradient_checkpointing_enable()
             else:
-                self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name_or_path, num_labels = 1)
+                self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name_or_path, num_labels = 1,torch_dtype=torch.float16)
 
         else:
             if "longformer" in model_name_or_path:
                 self.model = AutoModelForSequenceClassification.from_pretrained(model_name_or_path, num_labels = 1, torch_dtype=torch.float16)    
                 self.model.gradient_checkpointing_enable()
             else:
-                self.model = AutoModelForSequenceClassification.from_pretrained(model_name_or_path, num_labels = 1)    
+                self.model = AutoModelForSequenceClassification.from_pretrained(model_name_or_path, num_labels = 1,torch_dtype=torch.float16)    
 
         self.tokenizer = AutoTokenizer.from_pretrained(base_model_name)
         self.model = self.model.to(self.device)
@@ -167,7 +167,7 @@ class SentenceRankerPlus():
         dataloader = DataLoader(dataset,
                                 batch_size=batch_size,
                                 shuffle=False,
-                                num_workers=4)
+                                num_workers=2)
         torch.no_grad()
         scores = []
 
@@ -187,6 +187,24 @@ class SentenceRankerPlus():
     # ----------------------------------------------------------------------------
     # Data Preparation
     # ----------------------------------------------------------------------------
+
+    def set_text(self, text_list,train):
+      if train == True:
+        self.train_text = text_list
+      else :
+        self.val_text = text_list
+    
+    def set_abstract(self, text_list, train):
+      if train == True:
+        self.train_abstract = text_list
+      else :
+        self.val_abstract = text_list
+   
+    def set_labels(self, list_label, train):
+      if train == True:
+        self.train_labels = list_label
+      else :
+        self.val_labels = list_label
 
     def prepare_training_data(self, label_keys):
         logging.info("Trainer - preparing training data")
@@ -227,19 +245,19 @@ class SentenceRankerPlus():
                 print (e)
 
     def loading_pretrained_tokenizer(self, do_lower_case=False):
-        logging.info("Trainer - loading pretrained tokenizer " + self.base_model_name)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.base_model_name, do_lower_case=do_lower_case)
+        #logging.info("Trainer - loading pretrained tokenizer " + self.base_model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained('morenolq/thext-cs-scibert', do_lower_case=do_lower_case)
 
     def prepare_for_training(self, label_keys="rlp_labels"):
-        self.prepare_training_data(label_keys=label_keys)
-        self.prepare_validation_data(label_keys=label_keys)
+        #self.prepare_training_data(label_keys=label_keys)
+        #self.prepare_validation_data(label_keys=label_keys)
         self.loading_pretrained_tokenizer()
         self.prepare_dataloaders()
 
     def prepare_dataloaders(self):
         logging.info("Trainer - creating data loaders")
-        self.tensor_train_labels = torch.tensor(self.train_labels) #set up labels
-        self.tensor_val_labels = torch.tensor(self.val_labels) #set up labels
+        self.tensor_train_labels = torch.tensor(self.train_labels,dtype=torch.float16) #set up labels
+        self.tensor_val_labels = torch.tensor(self.val_labels,dtype=torch.float16) #set up labels
 
         self.train_dataset = InternalDataset(text_list=self.train_text,
                                             context_list=self.train_abstract,
@@ -258,11 +276,11 @@ class SentenceRankerPlus():
         self.train_dataloader = DataLoader(self.train_dataset, 
             batch_size = self.batch_size, 
             shuffle = True, 
-            num_workers=8)
+            num_workers=2)
         self.val_dataloader = DataLoader(self.val_dataset, 
             batch_size = self.batch_size, 
             shuffle = False, 
-            num_workers=8)
+            num_workers=2)
 
     def store_dataloaders(self, train_dl_path, val_dl_path):
         logging.info("Trainer - storing dataloaders")
@@ -283,7 +301,9 @@ class SentenceRankerPlus():
             self.base_model_name, 
             num_labels = 1, #for regression
             output_attentions = False, 
-            output_hidden_states = False
+            output_hidden_states = False,
+            use_auth_token=True,
+            torch_dtype=torch.float16
         )
 
         if self.attention_window is not None:
@@ -363,7 +383,7 @@ class SentenceRankerPlus():
         torch.cuda.empty_cache()
 
         # Create optimizer and learning rate scheduler
-        optimizer = AdamW(self.model.parameters(), lr = self.lr)
+        optimizer = AdamW(self.model.classifier.parameters(), lr = self.lr)
         total_steps = len(self.train_dataloader) * self.epochs
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps = 0, num_training_steps = total_steps)
 
@@ -371,7 +391,7 @@ class SentenceRankerPlus():
         ##### Training #####
         for epoch in range(self.epochs):  
             epoch_name = last_epoch + epoch
-            logging.info ("Storing at: " + str(store_ckp_prefix+str(epoch_name)))
+            #logging.info ("Storing at: " + str(store_ckp_prefix+str(epoch_name)))
             self.model.train()
             total_loss, total_val_loss = 0, 0
             for step, batch in enumerate(self.train_dataloader):
@@ -409,7 +429,11 @@ class SentenceRankerPlus():
             logging.info("Trainer - Validation Loss: " + str(avg_val_loss))
 
             #saving as checkpoint
+
             epoch_name = last_epoch + epoch
-            if not os.path.exists(store_ckp_prefix+str(epoch_name)):
-                os.makedirs(store_ckp_prefix+str(epoch_name))
-            self.model.save_pretrained(store_ckp_prefix+str(epoch_name))
+            sanitized_model_name = self.base_model_name.replace("/", "-")
+            ckp_dir = checkpoint_dir + "_" + sanitized_model_name + "_" + str(epoch_name)
+
+            if not os.path.exists(ckp_dir):
+              os.makedirs(ckp_dir)
+            self.model.save_pretrained(ckp_dir)

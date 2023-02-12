@@ -1,5 +1,3 @@
-from thext import RedundancyManager
-from thext import SentenceRankerPlus
 import spacy
 import rouge #py-rouge
 import numpy as np
@@ -20,6 +18,47 @@ class Highlighter():
         self.nlp = spacy.load(spacy_modelname, disable = ['ner'])
         self.nlp.max_length = 10000000
         self.batch_size = batch_size
+
+
+
+    def get_highlights_redundancy(self, sentences_list, abstract=None, NH=3, method="iterative"):
+         # Remove duplicates
+        sentences_list = list(set(sentences_list))
+
+        sentences_ranked = []
+
+        if abstract == None:
+            rank_scores = self.sr.get_scores(sentences_list, batch_size=self.batch_size)
+        else:
+            rank_scores = self.sr.get_scores(sentences_list, abstract, batch_size=self.batch_size)
+
+        indices = []
+        max_value = max(rank_scores)
+        index_max = rank_scores.index(max_value)
+        indices.append(index_max)
+        rank_scores[index_max] = -1
+        sentences_ranked.append(sentences_list[index_max])
+
+        if NH == None:
+            NH = len(sentences_list)
+
+        for _ in range(len(sentences_list)): #rank all the sentences
+            max_value = max(rank_scores)
+            index_max = rank_scores.index(max_value)
+            indices.append(index_max)
+            rank_scores[index_max] = -1
+            sentences_ranked.append(sentences_list[index_max])
+
+        if method == "clustering":
+            highlights = self.rm.get_highlights_cluster(sentences_ranked)
+        elif method == "iterative":
+            highlights = self.rm.get_highlights_iterative(sentences_ranked)
+        elif method == "trigram_block":
+            highlights = self.rm.get_highlights_trigram(sentences_ranked)
+        else:
+            print("Invalid method")
+
+        return highlights
 
     def get_highlights(self, sentences_list, rel_w=1.0, pos_w=0.5, red_w=0.5, NH=3, prefilter=True):
 
