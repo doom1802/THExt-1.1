@@ -14,6 +14,7 @@ nltk.download('punkt')
 
 
 def test_models(task = "task1",
+		fixed_weights = True,
 				method = "default",
 				num_highlights = 3,
 				base_model_name = "morenolq/thext-cs-scibert"):
@@ -34,12 +35,19 @@ def test_models(task = "task1",
 
 	if task =="task1":
 		data = load_dataset("cnn_dailymail" ,"3.0.0", split="validation")
-		model_name_or_path='checkpoint3_morenolq-thext-cs-scibert_1'
+		
+		if fixed_weights:
+			model_name_or_path='checkpoint3_morenolq-thext-cs-scibert_1'
+		else :
+			model_name_or_path = 'checkpoint_morenolq-thext-cs-scibert_0'
 		data = pd.DataFrame(data)
 		data = data.iloc[:1600]
 	else:
 		data = pd.read_csv('Datasets/val_task2.csv')
-		model_name_or_path = 'checkpoint4_morenolq-thext-cs-scibert_2'
+		if fixed_weights:
+			model_name_or_path = 'checkpoint4_morenolq-thext-cs-scibert_2'
+		else :
+			model_name_or_path = 'checkpoint2_morenolq-thext-cs-scibert_3'
 	
 	sr = SentenceRankerPlus(device='cuda')
 	sr.base_model_name = base_model_name
