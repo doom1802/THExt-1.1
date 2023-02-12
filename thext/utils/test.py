@@ -36,7 +36,7 @@ def test_models(task = "task1",
 		data = load_dataset("cnn_dailymail" ,"3.0.0", split="validation")
 		model_name_or_path='checkpoint3_morenolq-thext-cs-scibert_1'
 		data = pd.DataFrame(data)
-		data = data.iloc[:1700]
+		data = data.iloc[:1600]
 	else:
 		data = pd.read_csv('Datasets/val_task2.csv', index_col='Unnamed: 0')
 		model_name_or_path = 'checkpoint4_morenolq-thext-cs-scibert_2'
