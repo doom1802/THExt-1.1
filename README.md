@@ -23,11 +23,18 @@ python -m spacy download en_core_web_lg
 You can find pre-trained models and dataset for testing here: 
 https://drive.google.com/drive/folders/14MpUG-F03e7m8yUtvXOKJDK3cLBCPLiJ?usp=sharing
 
-If you want to download and use our dataset and pre-trained models, open the link above and run the following code in a python notebook
+If you want to download and use our dataset and pre-trained models, open the link above and create a shortcut in your drive account.
+
+Then, run the following code in a python notebook
 
 ```python
 from google.colab import drive
 drive.mount('/content/drive')
+```
+
+At the end, just set your current directory to
+```python
+%cd /content/drive/MyDrive/Project File
 ```
 
 ### Using pretrained models
