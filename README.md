@@ -1,6 +1,6 @@
-# THExt
+# THExt 1.1
 
-**T**ransformer-based **H**ighlights **Ext**raction(**THExt**)
+Adapting **T**ransformer-based **H**ighlights **Ext**raction(**THExt**) to news and articles: several approaches to tackle redundancy
 
 ### Examples and demo
 
